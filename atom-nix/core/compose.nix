@@ -133,6 +133,10 @@ let
               inherit std;
             }
             {
+              _if = !__isStd__;
+              use = l.removeAttrs extern [ "std" ];
+            }
+            {
               _if = __internal__test;
               # information about the internal module system itself
               # available to tests
