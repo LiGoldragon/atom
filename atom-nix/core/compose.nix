@@ -56,11 +56,13 @@
 let
   l = builtins;
   core = import ./mod.nix;
+
 in
-{
+input@{
   src,
   root,
   config,
+  system ? null,
   extern ? { },
   features ? [ ],
   # internal features of the composer function
@@ -77,6 +79,8 @@ let
     features = stdFeatures;
     inherit __internal__test;
   } (../. + "/std@.toml");
+
+  systemIsDefinedAndEnabled = system != null && l.elem "system" features;
 
   coreFeatures' = core.features.resolve core.coreToml.features coreFeatures;
   stdFeatures' = core.features.resolve core.stdToml.features stdFeatures;
@@ -112,7 +116,7 @@ let
             import = errors.import;
             scopedImport = errors.import;
             __fetchurl = errors.fetch;
-            __currentSystem = errors.system;
+            __currentSystem = errors.currentSystem;
             __currentTime = errors.time 0;
             __nixPath = errors.nixPath [ ];
             __storePath = errors.storePath;
@@ -131,6 +135,10 @@ let
             {
               _if = !__isStd__ && l.elem "std" coreFeatures';
               inherit std;
+            }
+            {
+              _if = !__isStd__;
+              system = if systemIsDefinedAndEnabled then input.system else core.errors.system;
             }
             {
               _if = !__isStd__;
