@@ -34,6 +34,8 @@ These features collectively provide a structured, introspectable, and efficient 
 # string/toLowerCase.nix: mod.toLowerCase
 str:
 let
+  inherit (use) std;
+
   head = std.substring 0 1 str;
   tail = std.substring 1 (-1) str;
 in
@@ -56,7 +58,7 @@ in
 }
 ```
 
-### `atom`: Top-level and Dependencies
+### `atom`: Top-level
 
 ```nix
 # root/mod.nix
@@ -66,14 +68,27 @@ in
 
 # nested/deep/mod.nix
 {
-  UseRoot = x: atom.RootFunc x;
+  UseRoot = x: atom.rootFunc x;
 }
 ```
 
-### `std`: Standard Library
+### `use`: external dependencies specified in the manifest
+
+```nix
+{
+  MyPkg = use.stdenv.mkDerivation {
+    pname = "foo";
+    version = "0.1";
+    src = use.my-src-tree;
+  };
+}
+```
+
+### `use.std`: A Proper Home for the Standard Library
 
 ```nix
 # utils/mod.nix
+let inherit (use) std; in
 {
   Double = x: std.mul 2 x;
   IsEven = x: std.mod x 2 == 0;
