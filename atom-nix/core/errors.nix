@@ -1,7 +1,7 @@
 let
   l = builtins;
-  imap = scopedImport { std = builtins; } ../std/list/imap.nix;
-  sublist = scopedImport { std = builtins; } ../std/list/sublist.nix;
+  imap = scopedImport { use.std = builtins; } ../std/list/imap.nix;
+  sublist = scopedImport { use.std = builtins; } ../std/list/sublist.nix;
   digits = n: l.stringLength (l.toString n);
   spaces = n: toString (l.genList (x: " ") n);
   warn = l.warn or l.trace;

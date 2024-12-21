@@ -1,3 +1,6 @@
+let
+  inherit (use) std;
+in
 {
   upperChars = mod.stringToChars "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   lowerChars = mod.stringToChars "abcdefghijklmnopqrstuvwxyz";

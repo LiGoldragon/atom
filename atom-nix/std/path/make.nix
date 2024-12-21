@@ -27,6 +27,8 @@
 */
 abs: frag:
 let
+  inherit (use) std;
+
   s = x: std.isString x || std.isPath x || x ? outPath || x ? __toString;
   abs' = if std.isPath abs then abs else /. + abs;
   p = std.substring 0 1 frag;

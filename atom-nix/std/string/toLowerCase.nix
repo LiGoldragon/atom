@@ -26,6 +26,8 @@
 */
 str:
 let
+  inherit (use) std;
+
   head = std.substring 0 1 str;
   tail = std.substring 1 (-1) str;
 in

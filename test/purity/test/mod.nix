@@ -1,3 +1,6 @@
+let
+  inherit (use) std;
+in
 {
   Builtins = builtins == std;
   Import = import;

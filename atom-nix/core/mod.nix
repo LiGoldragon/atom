@@ -6,14 +6,14 @@ let
   l = builtins;
   importAtom = import ./importAtom.nix;
   fix = import ../std/fix.nix;
-  when = scopedImport { std = builtins; } ../std/set/when.nix;
-  filterMap = scopedImport { std = builtins; } ../std/set/filterMap.nix;
-  make = scopedImport { std = builtins; } ../std/path/make.nix;
-  parse = scopedImport { std = builtins; } ../std/file/parse.nix;
+  when = scopedImport { use.std = builtins; } ../std/set/when.nix;
+  filterMap = scopedImport { use.std = builtins; } ../std/set/filterMap.nix;
+  make = scopedImport { use.std = builtins; } ../std/path/make.nix;
+  parse = scopedImport { use.std = builtins; } ../std/file/parse.nix;
   stdFilter = import ./stdFilter.nix;
   toLowerCase = scopedImport rec {
-    std = builtins;
-    mod = scopedImport { inherit std mod; } ../std/string/mod.nix;
+    use.std = builtins;
+    mod = scopedImport { inherit use mod; } ../std/string/mod.nix;
   } ../std/string/toLowerCase.nix;
   stdToml = l.fromTOML (l.readFile (../. + "/std@.toml"));
   coreToml = l.fromTOML (l.readFile (../. + "/core@.toml"));

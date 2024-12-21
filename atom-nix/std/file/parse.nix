@@ -25,6 +25,8 @@
 
 str:
 let
+  inherit (use) std;
+
   s = x: std.isString x || std.isPath x || x ? outPath || x ? __toString;
   l = std.length r;
   r = std.match "(\\.*[^.]+)\\.?(.+)?" (baseNameOf str);

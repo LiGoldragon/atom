@@ -1,3 +1,6 @@
+let
+  inherit (use) std;
+in
 {
   Foo = 1;
   bar = atom.foo + 2;

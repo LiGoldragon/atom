@@ -22,4 +22,4 @@
 
   If the `_if` attribute of the input set is `true` or missing, returns the input set with the `_if` attribute removed. Otherwise, returns an empty attribute set.
 */
-set: if set._if or true then std.removeAttrs set [ "_if" ] else { }
+set: if set._if or true then use.std.removeAttrs set [ "_if" ] else { }

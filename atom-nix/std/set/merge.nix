@@ -40,6 +40,9 @@
 
   :::
 */
+let
+  inherit (use) std;
+in
 lhs: rhs:
 mod.mergeUntil (
   path: lhs: rhs:

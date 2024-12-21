@@ -118,25 +118,23 @@ let
             __storePath = errors.storePath;
             __getEnv = errors.getEnv "";
             __getFlake = errors.import;
+            use = core.set.inject extern [
+              {
+                _if = __isStd__;
+                std = atomScope;
+              }
+              {
+                _if = !__isStd__ && l.elem "std" coreFeatures';
+                inherit std;
+              }
+            ];
           };
 
           scope'' = core.set.inject scope' [
             preOpt
             {
-              _if = !__isStd__ && l.elem "std" coreFeatures';
-              inherit std;
-            }
-            {
               _if = !__isStd__;
               atom = atomScope;
-            }
-            {
-              _if = __isStd__;
-              std = l.removeAttrs (extern // atom) [ "std" ];
-            }
-            {
-              _if = !__isStd__;
-              use = l.removeAttrs extern [ "std" ];
             }
             {
               _if = __internal__test;

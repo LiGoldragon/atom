@@ -28,4 +28,7 @@
 
   :::
 */
+let
+  inherit (use) std;
+in
 f: list: std.genList (n: f n (std.elemAt list n)) (std.length list)

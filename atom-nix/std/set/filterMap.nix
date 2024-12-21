@@ -23,6 +23,9 @@
 
   - `set`: The attribute set to filter and map.
 */
+let
+  inherit (use) std;
+in
 f: set:
 std.foldl' (
   acc: key:

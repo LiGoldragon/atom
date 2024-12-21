@@ -56,6 +56,7 @@
 
 pred: lhs: rhs:
 let
+  inherit (use) std;
   f =
     attrPath:
     std.zipAttrsWith (

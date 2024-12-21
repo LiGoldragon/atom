@@ -37,6 +37,8 @@
 */
 start: count: list:
 let
+  inherit (use) std;
+
   len = std.length list;
 in
 std.genList (n: std.elemAt list (n + start)) (
