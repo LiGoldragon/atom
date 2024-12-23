@@ -1,14 +1,6 @@
 {
   manifest,
   noSystemManifest ? null,
-  perSystemNames ? [
-    "checks"
-    "packages"
-    "apps"
-    "formatter"
-    "devShells"
-    "hydraJobs"
-  ],
   systems ? [
     "x86_64-linux"
     "aarch64-linux"
@@ -26,16 +18,19 @@ let
 
   noSystemAtom = importAtom { } noSystemManifest;
 
-  verifyNoSystem =
+  verifySystemFeature =
     atomManifest:
     let
       atomConfig = l.fromTOML (l.readFile atomManifest);
       features = atomConfig.features.default or [ ];
-      hasSystemFeature = l.elem "system" features;
     in
-    !hasSystemFeature;
+    l.elem "system" features;
 
-  hasNoSystemAtom = noSystemManifest != null && verifyNoSystem noSystemManifest;
+  systemEnabledError = abort "No-System atom has `system` feature enabled";
+
+  hasNoSystemAtom =
+    assert !(verifySystemFeature noSystemManifest) || systemEnabledError;
+    noSystemManifest != null;
 
   optionalNoSystemAtom = if hasNoSystemAtom then noSystemAtom else { };
 
@@ -43,7 +38,6 @@ let
     system:
     let
       evaluatedAtom = importAtom { inherit system; } manifest;
-      # perSystemAtomAttributes = l.getAttrs perSystemNames evaluatedAtom;
       mkPerSystemValue = _: value: { ${system} = value; };
     in
     l.mapAttrs mkPerSystemValue evaluatedAtom;
