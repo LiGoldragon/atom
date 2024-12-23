@@ -95,7 +95,8 @@ let
           fetchEnabledNpinsDep =
             depName: depConfig:
             let
-              importDep = depConfig.import or false;
+              depIsImport = depConfig.import or false;
+              depIsFlake = depConfig.flake or false;
               depArgs = depConfig.args or [ ];
               depHasArgs = depArgs != [ ];
               depIsEnabled = isDepEnabled depName depConfig;
@@ -117,7 +118,24 @@ let
 
               importedSrc = if depHasArgs then importedSrcWithArgs else import npinSrc;
 
-              dependency = if importDep then importedSrc else npinSrc;
+              flakeCompatFn = import (import ../npins).flake-compat;
+
+              importedFlakeDep =
+                let
+                  flakeCompatResult = flakeCompatFn {
+                    src = npinSrc;
+                    inherit system;
+                  };
+                in
+                flakeCompatResult.defaultNix;
+
+              dependency =
+                if depIsImport then
+                  importedSrc
+                else if depIsFlake then
+                  importedFlakeDep
+                else
+                  npinSrc;
             in
             if depIsEnabled then { "${depName}" = dependency; } else null;
 
