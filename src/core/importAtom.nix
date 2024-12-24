@@ -24,15 +24,17 @@ let
     }:
     path':
     let
+      l = builtins;
+
       mod = import ./mod.nix;
 
       path = mod.prepDir path';
       root = mod.prepDir (dirOf path); # TODO Is prepDir required twice?
 
-      file = builtins.readFile path;
-      config = builtins.fromTOML file;
+      file = l.readFile path;
+      config = l.fromTOML file;
       atom = config.atom or { };
-      id = builtins.seq version (atom.id or (mod.errors.missingAtom path' "id"));
+      id = l.seq version (atom.id or (mod.errors.missingAtom path' "id"));
       version = atom.version or (mod.errors.missingAtom path' "version");
       core = config.core or { };
       std = config.std or { };
@@ -51,12 +53,12 @@ let
       backend = config.backend or { };
       nix = backend.nix or { };
 
-      src = builtins.seq id (
+      src = l.seq id (
         let
           file = mod.parse (baseNameOf path);
-          len = builtins.stringLength file.name;
+          len = l.stringLength file.name;
         in
-        builtins.substring 0 (len - 1) file.name
+        l.substring 0 (len - 1) file.name
       );
 
       extern =
@@ -75,7 +77,7 @@ let
             depName: depConfig:
             let
               optional = depConfig.optional or false;
-              featureIsEnabled = builtins.elem depName features;
+              featureIsEnabled = l.elem depName features;
             in
             (optional && featureIsEnabled) || (!optional);
 
@@ -97,6 +99,8 @@ let
             let
               depIsImport = depConfig.import or false;
               depIsFlake = depConfig.flake or false;
+              inputOverrides = depConfig.inputOverrides or [ ];
+              depHasInputOverrides = inputOverrides != [ ];
               depArgs = depConfig.args or [ ];
               depHasArgs = depArgs != [ ];
               depIsEnabled = isDepEnabled depName depConfig;
@@ -106,15 +110,15 @@ let
               applyArguments =
                 appliedFunction: nextArgument:
                 let
-                  argsFromDeps = depConfig.argsFromDeps or true && builtins.isAttrs nextArgument;
-                  argIntersectedwithDeps = nextArgument // (builtins.intersectAttrs nextArgument extern);
+                  argsFromDeps = depConfig.argsFromDeps or true && l.isAttrs nextArgument;
+                  argIntersectedwithDeps = nextArgument // (l.intersectAttrs nextArgument extern);
                 in
                 if argsFromDeps nextArgument then
                   appliedFunction argIntersectedwithDeps
                 else
                   appliedFunction nextArgument;
 
-              importedSrcWithArgs = builtins.foldl' applyArguments (import npinSrc) depArgs;
+              importedSrcWithArgs = l.foldl' applyArguments (import npinSrc) depArgs;
 
               importedSrc = if depHasArgs then importedSrcWithArgs else import npinSrc;
 
@@ -126,8 +130,23 @@ let
                     src = npinSrc;
                     inherit system;
                   };
+                  mkOverrideNV =
+                    name:
+                    let
+                      missingInputError = abort "Manifest is missing input override `${name}`";
+                      value = pins.${name};
+                    in
+                    assert l.hasAttr name pins || missingInputError;
+                    {
+                      inherit name value;
+                    };
+                  overridesList = l.map mkOverrideNV inputOverrides;
+                  overrides = l.listToAttrs overridesList;
+                  resultWithoutOverrides = flakeCompatResult.defaultNix;
+                  resultWithInputOverrides = resultWithoutOverrides.overrideInputs overrides;
+                  result = if depHasInputOverrides then resultWithInputOverrides else resultWithoutOverrides;
                 in
-                flakeCompatResult.defaultNix;
+                result;
 
               dependency =
                 if depIsImport then

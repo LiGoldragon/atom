@@ -1,19 +1,16 @@
 {
   "pins": {
     "flake-compat": {
-      "type": "GitRelease",
+      "type": "Git",
       "repository": {
         "type": "GitHub",
-        "owner": "edolstra",
+        "owner": "ElvishJerricco",
         "repo": "flake-compat"
       },
-      "pre_releases": false,
-      "version_upper_bound": null,
-      "release_prefix": null,
-      "version": "v1.0.1",
-      "revision": "0f9255e01c2351cc7d116c072cb317785dd33b33",
-      "url": "https://api.github.com/repos/edolstra/flake-compat/tarball/v1.0.1",
-      "hash": "0m9grvfsbwmvgwaxvdzv6cmyvjnlww004gfxjvcl806ndqaxzy4j"
+      "branch": "add-overrideInputs",
+      "revision": "ad8d6af6aa8a14851a60bd00927f42b9798544ea",
+      "url": "https://github.com/ElvishJerricco/flake-compat/archive/ad8d6af6aa8a14851a60bd00927f42b9798544ea.tar.gz",
+      "hash": "08nyw5g93qlw35nwnh19yynvbni2c3licf6xzhjiw0318dybbxs0"
     },
     "nixpkgs": {
       "type": "Channel",
