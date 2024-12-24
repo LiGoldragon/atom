@@ -32,7 +32,13 @@ let
     assert !(verifySystemFeature noSystemManifest) || systemEnabledError;
     noSystemManifest != null;
 
-  optionalNoSystemAtom = if hasNoSystemAtom then noSystemAtom else { };
+  optionalNoSystemAtom =
+    if (noSystemManifest == null) then
+      { }
+    else if hasNoSystemAtom then
+      noSystemAtom
+    else
+      { };
 
   transformedAtomFromSystem =
     system:
