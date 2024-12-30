@@ -2,8 +2,8 @@
   description = "Composable Nix Modules";
 
   outputs = _: {
-    core = import ./src/core/mod.nix;
-    importAtom = import ./src/core/importAtom.nix;
+    core = import ./atom-nix/core/mod.nix;
+    importAtom = import ./atom-nix/core/importAtom.nix;
     mkAtomicFlake = import ./legacy-nix/mkAtomicFlake.nix;
   };
 }

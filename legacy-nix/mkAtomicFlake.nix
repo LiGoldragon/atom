@@ -10,11 +10,11 @@
 }:
 
 let
-  npinsSrcs = import ../src/npins;
+  npinsSrcs = import ../atom-nix/npins;
   lib = import (npinsSrcs."nixpkgs.lib" + "/lib");
   l = lib // builtins;
 
-  importAtom = import ../src/core/importAtom.nix;
+  importAtom = import ../atom-nix/core/importAtom.nix;
 
   noSystemAtom = importAtom { } noSystemManifest;
 
