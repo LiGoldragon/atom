@@ -52,13 +52,14 @@ let
       backend = config.backend or { };
       nix = backend.nix or { };
 
-      src = l.seq id (
+      impliedSrc =
         let
           file = mod.parse (baseNameOf path);
           len = l.stringLength file.name;
         in
-        l.substring 0 (len - 1) file.name
-      );
+        l.substring 0 (len - 1) file.name;
+
+      src = l.seq id (atom.src or impliedSrc);
 
       extern =
         let
