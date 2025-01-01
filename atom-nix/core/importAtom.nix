@@ -16,6 +16,8 @@
   valid input (and the CLI should type check on it's end)
 */
 let
+  mod = import ./mod.nix;
+
   importAtom =
     importAtomArgs@{
       system ? null,
@@ -25,9 +27,6 @@ let
     path':
     let
       l = builtins;
-
-      mod = import ./mod.nix;
-
       path = mod.prepDir path';
       root = mod.prepDir (dirOf path); # TODO Is prepDir required twice?
 
