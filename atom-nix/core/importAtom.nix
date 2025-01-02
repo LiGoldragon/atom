@@ -17,6 +17,7 @@
 */
 let
   mod = import ./mod.nix;
+  flakeCompatFn = import (import ../npins).flake-compat;
 
   importAtom =
     importAtomArgs@{
@@ -51,6 +52,13 @@ let
 
       backend = config.backend or { };
       nix = backend.nix or { };
+      fetcher = nix.fetcher or "native";
+      # TODO native doesn't exist yet
+      throwMissingNativeFetcher = abort "Native fetcher isn't implemented yet";
+      throwNonExistingFetcher = abort "A `${backend}` fetcher does not exist";
+      fetcherConfig = config.fetcher or { };
+      npinRoot = fetcherConfig.npin.root or "npins";
+      pins = import (dirOf path + "/${npinRoot}");
 
       impliedSrc =
         let
@@ -61,73 +69,55 @@ let
 
       src = l.seq id (atom.src or impliedSrc);
 
-      extern =
+      mkExtern =
+        depName: depConfig:
         let
-          # TODO native doesn't exist yet
-          fetcher = nix.fetcher or "native";
-          throwMissingNativeFetcher = abort "Native fetcher isn't implemented yet";
+          name = depConfig.name or depName;
+          depIsImport = depConfig.import or false;
+          depIsFlake = depConfig.flake or false;
+          depIsLocal = depConfig.local or false;
+          # Dependency is an atom by default
+          depIsAtom = depConfig.atom or true;
+          inputOverrides = depConfig.inputOverrides or [ ];
+          depHasInputOverrides = inputOverrides != [ ];
 
-          fetcherConfig = config.fetcher or { };
-          npinRoot = fetcherConfig.npin.root or "npins";
-          pins = import (dirOf path + "/${npinRoot}");
+          depIsOptional = depConfig.optional or false;
+          featureIsEnabled = l.elem depName features;
+          depIsEnabled = !depIsOptional || (depIsOptional && featureIsEnabled);
 
-          local = config.local or { };
+          depArgs = depConfig.args or [ ];
+          depHasArgs = depArgs != [ ];
 
-          isDepEnabled =
-            depName: depConfig:
+          # TODO how to handle features?
+          mkAtom =
+            srcRoot:
             let
-              optional = depConfig.optional or false;
-              featureIsEnabled = l.elem depName features;
+              manifestFileName = "${name}@.toml";
+              manifest = "${srcRoot}/${manifestFileName}";
             in
-            (optional && featureIsEnabled) || (!optional);
+            importAtom { inherit system; } manifest;
 
-          obtainLocalDep =
-            depName: depConfig:
+          npinsDependency =
             let
-              depManifest = "${root}/${depConfig.path}";
-              depIsEnabled = isDepEnabled depName depConfig;
-              dependency = importAtom { inherit system; } depManifest;
-            in
-            if depIsEnabled then { "${depName}" = dependency; } else null;
+              npinsSrc = "${pins.${name}}/${depConfig.subdir or ""}";
 
-          obtainedLocalDeps = mod.filterMap obtainLocalDep local;
-
-          localDeps = if local != { } then obtainedLocalDeps else { };
-
-          fetchEnabledNpinsDep =
-            depName: depConfig:
-            let
-              depIsImport = depConfig.import or false;
-              depIsFlake = depConfig.flake or false;
-              inputOverrides = depConfig.inputOverrides or [ ];
-              depHasInputOverrides = inputOverrides != [ ];
-              depArgs = depConfig.args or [ ];
-              depHasArgs = depArgs != [ ];
-              depIsEnabled = isDepEnabled depName depConfig;
-
-              npinSrc = "${pins.${depConfig.name or depName}}/${depConfig.subdir or ""}";
-
-              applyArguments =
+              applyNextArg =
                 appliedFunction: nextArgument:
                 let
                   argsFromDeps = depConfig.argsFromDeps or true && l.isAttrs nextArgument;
-                  argIntersectedwithDeps = nextArgument // (l.intersectAttrs nextArgument extern);
+                  intersectedArgument = nextArgument // (l.intersectAttrs nextArgument extern);
                 in
-                if argsFromDeps nextArgument then
-                  appliedFunction argIntersectedwithDeps
-                else
-                  appliedFunction nextArgument;
+                if argsFromDeps then appliedFunction intersectedArgument else appliedFunction nextArgument;
 
-              importedSrcWithArgs = l.foldl' applyArguments (import npinSrc) depArgs;
+              importedSrcWithArgs = l.foldl' applyNextArg (import npinsSrc) depArgs;
 
-              importedSrc = if depHasArgs then importedSrcWithArgs else import npinSrc;
-
-              flakeCompatFn = import (import ../npins).flake-compat;
+              importedSrc = if depHasArgs then importedSrcWithArgs else import npinsSrc;
 
               importedFlakeDep =
+                assert (!depIsImport) || abort "Dependency ${depName} cannot enable both `flake` and `import`";
                 let
                   flakeCompatResult = flakeCompatFn {
-                    src = npinSrc;
+                    src = npinsSrc;
                     inherit system;
                   };
                   mkOverrideNV =
@@ -135,41 +125,45 @@ let
                     let
                       missingInputError = abort "Manifest is missing input override `${name}`";
                       value = pins.${name};
+                      result = { inherit name value; };
                     in
                     assert l.hasAttr name pins || missingInputError;
-                    {
-                      inherit name value;
-                    };
+                    result;
                   overridesList = l.map mkOverrideNV inputOverrides;
                   overrides = l.listToAttrs overridesList;
                   resultWithoutOverrides = flakeCompatResult.defaultNix;
                   resultWithInputOverrides = resultWithoutOverrides.overrideInputs overrides;
-                  result = if depHasInputOverrides then resultWithInputOverrides else resultWithoutOverrides;
                 in
-                result;
+                if depHasInputOverrides then resultWithInputOverrides else resultWithoutOverrides;
 
-              dependency =
-                if depIsImport then
-                  importedSrc
-                else if depIsFlake then
-                  importedFlakeDep
-                else
-                  npinSrc;
+              importedAtom = mkAtom npinsSrc;
+
             in
-            if depIsEnabled then { "${depName}" = dependency; } else null;
+            if depIsFlake then
+              importedFlakeDep
+            else if depIsImport then
+              importedSrc
+            else if depIsAtom then
+              importedAtom
+            else
+              npinsSrc;
 
-          npinsDeps = mod.filterMap fetchEnabledNpinsDep config.fetch or { };
-
-          externalDeps =
+          fetchedDependency =
             if fetcher == "npins" then
-              npinsDeps
+              npinsDependency
             else if fetcher == "native" then
               throwMissingNativeFetcher
             else
-              { };
+              throwNonExistingFetcher;
+
+          localDependency = mkAtom root;
+
+          dependency = if depIsLocal then localDependency else fetchedDependency;
 
         in
-        localDeps // externalDeps;
+        if depIsEnabled then { "${depName}" = dependency; } else null;
+
+      extern = mod.filterMap mkExtern config.fetch or { };
 
     in
     mod.compose {
