@@ -23,6 +23,9 @@ let
     importAtomArgs@{
       system ? null,
       features ? null,
+      inputs ? { },
+      propagateInputs ? false,
+      _calledFromFlake ? false,
       __internal__test ? false,
     }:
     path':
@@ -39,6 +42,7 @@ let
       core = config.core or { };
       std = config.std or { };
       meta = atom.meta or { };
+      propagateInputs = importAtomArgs.propagateInputs || atom.propagateInputs or false;
 
       features =
         let
@@ -69,6 +73,60 @@ let
 
       src = l.seq id (atom.src or impliedSrc);
 
+      mkFlake =
+        assert (!depIsImport) || abort "Dependency ${depName} cannot enable both `flake` and `import`";
+        let
+          flakeCompatResult = flakeCompatFn {
+            src = npinsSrc;
+            inherit system;
+          };
+          mkOverrideNV =
+            name:
+            let
+              missingInputError = abort "Manifest is missing input override `${name}`";
+              value = inputs.${name} or pins.${name};
+              result = { inherit name value; };
+            in
+            assert l.hasAttr name pins || missingInputError;
+            result;
+          overridesList = l.map mkOverrideNV inputOverrides;
+          overrides = l.listToAttrs overridesList;
+          resultWithoutOverrides = flakeCompatResult.defaultNix;
+          resultWithInputOverrides = resultWithoutOverrides.overrideInputs overrides;
+        in
+        if depHasInputOverrides then resultWithInputOverrides else resultWithoutOverrides;
+
+      alt-mkExtern =
+        depName: depConfig:
+        let
+          name = depConfig.name or depName;
+          depIsImport = depConfig.import or false;
+          depIsFlake = depConfig.flake or false;
+          depIsLocal = depConfig.local or false;
+          # Dependency is an atom by default
+          depIsAtom = depConfig.atom or true;
+          inputOverrides = depConfig.inputOverrides or [ ];
+          depHasInputOverrides = inputOverrides != [ ];
+
+          depIsOptional = depConfig.optional or false;
+          featureIsEnabled = l.elem depName features;
+          depIsEnabled = !depIsOptional || (depIsOptional && featureIsEnabled);
+
+          dependency =
+            if depIsImport then
+              mkImport name value
+            else if depIsFlake then
+              mkFlake name value
+            else if depIsLocal then
+              mkLocalAtom name value
+            else if depIsAtom then
+              mkAtom name value
+            else
+              null;
+
+        in
+        if depIsEnabled then { "${depName}" = dependency; } else null;
+
       mkExtern =
         depName: depConfig:
         let
@@ -92,6 +150,7 @@ let
           mkAtom =
             srcRoot:
             let
+              # TODO this will obviously evolve
               manifestFileName = "${name}@.toml";
               manifest = "${srcRoot}/${manifestFileName}";
             in
@@ -124,7 +183,7 @@ let
                     name:
                     let
                       missingInputError = abort "Manifest is missing input override `${name}`";
-                      value = pins.${name};
+                      value = inputs.${name} or pins.${name};
                       result = { inherit name value; };
                     in
                     assert l.hasAttr name pins || missingInputError;
