@@ -1,6 +1,9 @@
 {
   manifest,
   noSystemManifest ? null,
+  inputs ? { },
+  propagateInputs ? false,
+  features ? null,
   systems ? [
     "x86_64-linux"
     "aarch64-linux"
@@ -16,7 +19,12 @@ let
 
   importAtom = import ../atom-nix/core/importAtom.nix;
 
-  noSystemAtom = importAtom { } noSystemManifest;
+  mkNoSystemAtom = importAtom {
+    inherit inputs propagateInputs features;
+    _calledFromFlake = true;
+  };
+
+  noSystemAtom = mkNoSystemAtom noSystemManifest;
 
   verifySystemFeature =
     atomManifest:
@@ -43,7 +51,11 @@ let
   transformedAtomFromSystem =
     system:
     let
-      evaluatedAtom = importAtom { inherit system; } manifest;
+      mkAtom = importAtom {
+        inherit inputs propagateInputs features;
+        _calledFromFlake = true;
+      };
+      evaluatedAtom = mkAtom manifest;
       mkPerSystemValue = _: value: { ${system} = value; };
     in
     l.mapAttrs mkPerSystemValue evaluatedAtom;
