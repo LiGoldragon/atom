@@ -65,17 +65,14 @@ let
   npinRoot = fetcherConfig.npin.root or "npins";
   rawNpins = import (dirOf path + "/${npinRoot}");
 
-  # overridenNpins =
-  #   let
-  #     relevantFetches = l.intersectAttrs npins fetch;
-  #     intersectedInputs = l.intersectAttrs relevantFetches inputs;
-  #     flakeOverriddenNpins = { };
-  #   in
-  #   if _calledFromFlake then flakeOverriddenNpins else { };
+  overriddenNpins =
+    let
+      # Ensures all inputs used are declared in manifest
+      intersectedInputs = l.intersectAttrs fetch inputs;
+    in
+    rawNpins // intersectedInputs;
 
-  # npins-alt = if propagateInputs then overriddenNpins else rawNpins;
-
-  npins = rawNpins;
+  npins = if propagateInputs then overriddenNpins else rawNpins;
 
   impliedSrc =
     let
@@ -86,7 +83,7 @@ let
 
   src = l.seq id (atom.src or impliedSrc);
 
-  depSources =
+  finalInputs =
     if fetcher == "npins" then
       npins
     else if fetcher == "native" then
@@ -94,18 +91,34 @@ let
     else
       throwNonExistingFetcher;
 
+  mkInput =
+    name:
+    let
+      missingInputError = abort "Missing Input for: `${name}`";
+    in
+    finalInputs.${name} or missingInputError;
+
   # TODO how to handle features?
   mkAtom =
     depName: depConfig:
     let
       name = depConfig.name or depName;
       type = depConfig.type or "atom";
-      srcRoot = if type == "local" then root else depSources.${depName};
+      srcRoot = if type == "local" then root else mkInput depName;
       # TODO this will obviously evolve
       manifestFileName = "${name}@.toml";
       manifest = "${srcRoot}/${manifestFileName}";
+      depPropagateInputs = depConfig.propagateInputs or propagateInputs;
     in
-    importAtom { inherit system; } manifest;
+    importAtom {
+      inherit
+        system
+        importAtom
+        mod
+        flakeCompatFn
+        ;
+      propagateInputs = depPropagateInputs;
+    } manifest;
 
   mkFlake =
     depName: depConfig:
@@ -113,20 +126,19 @@ let
       name = depConfig.name or depName;
       inputOverrides = depConfig.inputOverrides or [ ];
       depHasInputOverrides = inputOverrides != [ ];
+      input = mkInput name;
 
       flakeCompatResult = flakeCompatFn {
-        src = depSources.${name};
+        src = input;
         inherit system;
       };
 
       mkOverrideNV =
         name:
         let
-          missingInputError = abort "Manifest is missing input override `${name}`";
-          value = inputs.${name} or npins.${name};
+          value = mkInput name;
           result = { inherit name value; };
         in
-        assert l.hasAttr name npins || missingInputError;
         result;
 
       overridesList = l.map mkOverrideNV inputOverrides;
@@ -134,14 +146,22 @@ let
       resultWithoutOverrides = flakeCompatResult.defaultNix;
       resultWithInputOverrides = resultWithoutOverrides.overrideInputs overrides;
 
+      inputIsFlake = input._type == "flake";
+      possiblyRawFlake = if inputIsFlake then input else flakeCompatFlake;
+      flakeCompatFlake =
+        if depHasInputOverrides then resultWithInputOverrides else resultWithoutOverrides;
+
     in
-    if depHasInputOverrides then resultWithInputOverrides else resultWithoutOverrides;
+    if _calledFromFlake then possiblyRawFlake else flakeCompatFlake;
 
   mkImport =
     depName: depConfig:
     let
       name = depConfig.name or depName;
-      rawSrc = "${depSources.${name}}/${depConfig.subdir or ""}";
+      input = finalInputs.${name};
+      possiblyFlakeSrcRoot = if inputIsFlake then input.src else input;
+      rawSrcRoot = if _calledFromFlake then possiblyFlakeSrcRoot else input;
+      rawSrc = "${rawSrcRoot}/${depConfig.subdir or ""}";
       depArgs = depConfig.args or [ ];
       depHasArgs = depArgs != [ ];
 
@@ -158,7 +178,7 @@ let
     in
     if depHasArgs then importedSrcWithArgs else import rawSrc;
 
-  mkSrc = depName: depConfig: depSources.${depConfig.name or depName};
+  mkSrc = depName: depConfig: finalInputs.${depConfig.name or depName};
 
   mkExtern =
     depName: depConfig:
