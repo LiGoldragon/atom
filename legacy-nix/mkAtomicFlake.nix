@@ -21,10 +21,13 @@ let
 
   mkNoSystemAtom = importAtom {
     inherit inputs propagateInputs features;
+    system = null;
     _calledFromFlake = true;
   };
 
-  noSystemAtom = mkNoSystemAtom noSystemManifest;
+  noSystemAtom =
+    assert !(verifySystemFeature noSystemManifest) || systemEnabledError;
+    mkNoSystemAtom noSystemManifest;
 
   verifySystemFeature =
     atomManifest:
@@ -36,17 +39,9 @@ let
 
   systemEnabledError = abort "No-System atom has `system` feature enabled";
 
-  hasNoSystemAtom =
-    assert !(verifySystemFeature noSystemManifest) || systemEnabledError;
-    noSystemManifest != null;
+  hasNoSystemAtom = noSystemManifest != null;
 
-  optionalNoSystemAtom =
-    if (noSystemManifest == null) then
-      { }
-    else if hasNoSystemAtom then
-      noSystemAtom
-    else
-      { };
+  optionalNoSystemAtom = l.optionalAttrs hasNoSystemAtom noSystemAtom;
 
   transformedAtomFromSystem =
     system:
