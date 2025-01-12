@@ -2,7 +2,7 @@
   manifest,
   noSystemManifest ? null,
   inputs ? { },
-  propagateInputs ? false,
+  propagate ? false,
   features ? null,
   systems ? [
     "x86_64-linux"
@@ -20,7 +20,7 @@ let
   importAtom = import ../atom-nix/core/importAtom.nix;
 
   mkNoSystemAtom = importAtom {
-    inherit inputs propagateInputs features;
+    inherit inputs propagate features;
     system = null;
     _calledFromFlake = true;
   };
@@ -47,7 +47,7 @@ let
     system:
     let
       mkAtom = importAtom {
-        inherit inputs propagateInputs features;
+        inherit inputs propagate features;
         _calledFromFlake = true;
       };
       evaluatedAtom = mkAtom manifest;

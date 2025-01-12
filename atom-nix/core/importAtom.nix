@@ -19,12 +19,14 @@ importAtomArgs@{
   system ? null,
   features ? null,
   inputs ? { },
-  propagateInputs ? false,
+  propagate ? false,
   _calledFromFlake ? false,
   __internal__test ? false,
+  # Passed to further `importAtom`s
   importAtom ? (import ./importAtom.nix),
   mod ? (import ./mod.nix),
   flakeCompatFn ? (import (import ../npins).flake-compat),
+  flakeInputsFn ? (import (import ../npins).flake-inputs),
 }:
 path':
 let
@@ -42,7 +44,7 @@ let
   meta = atom.meta or { };
   fetch = config.fetch or { };
 
-  propagateInputs = importAtomArgs.propagateInputs || atom.propagateInputs or false;
+  propagate = importAtomArgs.propagate || atom.propagate or false;
 
   features =
     let
@@ -54,26 +56,6 @@ let
     in
     mod.features.resolve featSet featIn;
 
-  backend = config.backend or { };
-  nix = backend.nix or { };
-  fetcher = nix.fetcher or "native";
-  # TODO native doesn't exist yet
-  throwMissingNativeFetcher = abort "Native fetcher isn't implemented yet";
-  throwNonExistingFetcher = abort "A `${backend}` fetcher does not exist";
-  fetcherConfig = config.fetcher or { };
-
-  npinRoot = fetcherConfig.npin.root or "npins";
-  rawNpins = import (dirOf path + "/${npinRoot}");
-
-  overriddenNpins =
-    let
-      # Ensures all inputs used are declared in manifest
-      intersectedInputs = l.intersectAttrs fetch inputs;
-    in
-    rawNpins // intersectedInputs;
-
-  npins = if propagateInputs then overriddenNpins else rawNpins;
-
   impliedSrc =
     let
       file = mod.parse (baseNameOf path);
@@ -83,20 +65,33 @@ let
 
   src = l.seq id (atom.src or impliedSrc);
 
-  finalInputs =
-    if fetcher == "npins" then
-      npins
-    else if fetcher == "native" then
-      throwMissingNativeFetcher
-    else
-      throwNonExistingFetcher;
+  backend = config.backend or { };
+  nix = backend.nix or { };
+  fetcher = nix.fetcher or "native";
+  fetcherConfig = config.fetcher or { };
 
-  mkInput =
-    name:
+  # TODO native doesn't exist yet
+  throwMissingNativeFetcher = abort "Native fetcher isn't implemented yet";
+  throwNonExistingFetcher = abort "A `${backend}` fetcher does not exist";
+
+  npinRoot = fetcherConfig.npin.root or "npins";
+  rawNpins = import (root + "/${npinRoot}");
+  npinsInputs = rawNpins // (importAtomArgs.inputs or { });
+
+  flakeLock = flakeInputsFn { inherit root; };
+  flakeLockInputs = flakeLock // importAtomArgs.inputs;
+
+  inputs =
     let
-      missingInputError = abort "Missing Input for: `${name}`";
+      inputsIndex = {
+        npins = npinsInputs;
+        flake-lock = flakeLockInputs;
+        native = throwMissingNativeFetcher;
+      };
     in
-    finalInputs.${name} or missingInputError;
+    inputsIndex.${fetcher} or throwNonExistingFetcher;
+
+  mkInput = name: inputs.${name} or abort "Missing Input for: `${name}`";
 
   # TODO how to handle features?
   mkAtom =
@@ -104,21 +99,28 @@ let
     let
       name = depConfig.name or depName;
       type = depConfig.type or "atom";
-      srcRoot = if type == "local" then root else mkInput depName;
+      srcRoot = if type == "local" then root else inputs.${name};
       # TODO this will obviously evolve
       manifestFileName = "${name}@.toml";
       manifest = "${srcRoot}/${manifestFileName}";
-      depPropagateInputs = depConfig.propagateInputs or propagateInputs;
+      overrides = depConfig.inputOverrides or [ ];
+      depHasInputOverrides = overrides != [ ];
+      overrideInputs = l.getAttrs overrides inputs;
+      optionalOverrides = if depHasInputOverrides then overrideInputs else { };
+      optionalInputs = if propagate then inputs else optionalOverrides;
+      args = {
+        inputs = optionalInputs;
+        inherit
+          system
+          importAtom
+          mod
+          flakeCompatFn
+          flakeInputsFn
+          propagate
+          ;
+      };
     in
-    importAtom {
-      inherit
-        system
-        importAtom
-        mod
-        flakeCompatFn
-        ;
-      propagateInputs = depPropagateInputs;
-    } manifest;
+    importAtom args manifest;
 
   mkFlake =
     depName: depConfig:
@@ -126,23 +128,14 @@ let
       name = depConfig.name or depName;
       inputOverrides = depConfig.inputOverrides or [ ];
       depHasInputOverrides = inputOverrides != [ ];
-      input = mkInput name;
+      input = inputs.${name};
 
       flakeCompatResult = flakeCompatFn {
         src = input;
         inherit system;
       };
 
-      mkOverrideNV =
-        name:
-        let
-          value = mkInput name;
-          result = { inherit name value; };
-        in
-        result;
-
-      overridesList = l.map mkOverrideNV inputOverrides;
-      overrides = l.listToAttrs overridesList;
+      overrides = l.getAttrs inputOverrides inputs;
       resultWithoutOverrides = flakeCompatResult.defaultNix;
       resultWithInputOverrides = resultWithoutOverrides.overrideInputs overrides;
 
@@ -158,9 +151,10 @@ let
     depName: depConfig:
     let
       name = depConfig.name or depName;
-      input = finalInputs.${name};
-      possiblyFlakeSrcRoot = if inputIsFlake then input.src else input;
-      rawSrcRoot = if _calledFromFlake then possiblyFlakeSrcRoot else input;
+      input = inputs.${name};
+      inputIsFlake = input._type == "flake";
+      srcRootFromFlake = if inputIsFlake then input.outPath else input;
+      rawSrcRoot = if _calledFromFlake then srcRootFromFlake else input;
       rawSrc = "${rawSrcRoot}/${depConfig.subdir or ""}";
       depArgs = depConfig.args or [ ];
       depHasArgs = depArgs != [ ];
@@ -178,7 +172,7 @@ let
     in
     if depHasArgs then importedSrcWithArgs else import rawSrc;
 
-  mkSrc = depName: depConfig: finalInputs.${depConfig.name or depName};
+  mkSrc = depName: depConfig: mkInput (depConfig.name or depName);
 
   mkExtern =
     depName: depConfig:
@@ -189,15 +183,16 @@ let
       depIsEnabled = !depIsOptional || (depIsOptional && featureIsEnabled);
       typeError = abort "Dependency `${depName}` declares type `${type}` which does not exist";
 
-      make = {
+      makeIndex = {
         atom = mkAtom;
         flake = mkFlake;
         import = mkImport;
+        lib = mkImport;
         local = mkAtom;
         src = mkSrc;
       };
 
-      dependency = (make.${type} or typeError) depName depConfig;
+      dependency = (makeIndex.${type} or typeError) depName depConfig;
 
     in
     if depIsEnabled then { "${depName}" = dependency; } else null;
