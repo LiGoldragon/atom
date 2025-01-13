@@ -47,7 +47,12 @@ let
     system:
     let
       mkAtom = importAtom {
-        inherit inputs propagate features;
+        inherit
+          inputs
+          propagate
+          features
+          system
+          ;
         _calledFromFlake = true;
       };
       evaluatedAtom = mkAtom manifest;
