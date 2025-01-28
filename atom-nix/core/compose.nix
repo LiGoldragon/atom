@@ -80,7 +80,7 @@ let
     inherit __internal__test;
   } (../. + "/std@.toml");
 
-  systemIsDefinedAndEnabled = system != null && l.elem "system" features;
+  systemIsDefinedAndEnabled = system != null && config.atom.system or false;
 
   coreFeatures' = core.features.resolve core.coreToml.features coreFeatures;
   stdFeatures' = core.features.resolve core.stdToml.features stdFeatures;
