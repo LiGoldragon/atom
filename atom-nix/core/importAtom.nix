@@ -79,7 +79,10 @@ let
   npinsInputs = rawNpins // (importAtomArgs.inputs or { });
 
   flakeLock = flakeInputsFn { inherit root; };
-  flakeLockInputs = flakeLock // importAtomArgs.inputs;
+  flakeLockAndInputs = flakeLock // importAtomArgs.inputs;
+
+  # Nix flakes already have their inputs
+  flakeLockInputs = if _calledFromFlake then importAtomArgs.inputs else flakeLockAndInputs;
 
   inputs =
     let
