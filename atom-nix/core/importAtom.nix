@@ -139,10 +139,11 @@ let
       resultWithoutOverrides = flakeCompatResult.defaultNix;
       resultWithInputOverrides = resultWithoutOverrides.overrideInputs overrides;
 
-      inputIsFlake = input._type == "flake";
-      possiblyRawFlake = if inputIsFlake then input else flakeCompatFlake;
       flakeCompatFlake =
         if depHasInputOverrides then resultWithInputOverrides else resultWithoutOverrides;
+
+      inputIsFlake = input._type == "flake";
+      possiblyRawFlake = if inputIsFlake then input else flakeCompatFlake;
 
     in
     if _calledFromFlake then possiblyRawFlake else flakeCompatFlake;
