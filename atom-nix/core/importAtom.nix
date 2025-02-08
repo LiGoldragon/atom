@@ -24,22 +24,22 @@ importAtomArgs@{
   __internal__test ? false,
   # Passed to further `importAtom`s
   importAtom ? (import ./importAtom.nix),
-  mod ? (import ./mod.nix),
+  core ? (import ./mod.nix),
   flakeCompatFn ? (import (import ../npins).flake-compat),
   flakeInputsFn ? (import (import ../npins).flake-inputs),
 }:
 path':
 let
   l = builtins;
-  path = mod.prepDir path';
-  root = mod.prepDir (dirOf path); # TODO Is prepDir required twice?
+  path = core.prepDir path';
+  root = core.prepDir (dirOf path); # TODO Is prepDir required twice?
 
   file = l.readFile path;
   config = l.fromTOML file;
   atom = config.atom or { };
-  id = l.seq version (atom.id or (mod.errors.missingAtom path' "id"));
-  version = atom.version or (mod.errors.missingAtom path' "version");
-  core = config.core or { };
+  id = l.seq version (atom.id or (core.errors.missingAtom path' "id"));
+  version = atom.version or (core.errors.missingAtom path' "version");
+  coreConfig = config.core or { };
   std = config.std or { };
   meta = atom.meta or { };
   fetch = config.fetch or { };
@@ -54,11 +54,11 @@ let
       argsHaveNoFeatures = atomFeatures == null;
       featIn = if argsHaveNoFeatures then default else atomFeatures;
     in
-    mod.features.resolve featSet featIn;
+    core.features.resolve featSet featIn;
 
   impliedSrc =
     let
-      file = mod.parse (baseNameOf path);
+      file = core.parse (baseNameOf path);
       len = l.stringLength file.name;
     in
     l.substring 0 (len - 1) file.name;
@@ -116,7 +116,7 @@ let
         inherit
           system
           importAtom
-          mod
+          core
           flakeCompatFn
           flakeInputsFn
           propagate
@@ -201,10 +201,10 @@ let
     in
     if depIsEnabled then { "${depName}" = dependency; } else null;
 
-  extern = mod.filterMap mkExtern fetch;
+  extern = core.filterMap mkExtern fetch;
 
 in
-mod.compose {
+core.compose {
   inherit
     src
     root
@@ -216,14 +216,14 @@ mod.compose {
     ;
   coreFeatures =
     let
-      feat = core.features or mod.coreToml.features.default;
+      feat = coreConfig.features or core.coreToml.features.default;
     in
-    mod.features.resolve mod.coreToml.features feat;
+    core.features.resolve core.coreToml.features feat;
   stdFeatures =
     let
-      feat = std.features or mod.stdToml.features.default;
+      feat = std.features or core.stdToml.features.default;
     in
-    mod.features.resolve mod.stdToml.features feat;
+    core.features.resolve core.stdToml.features feat;
 
   __isStd__ = meta.__is_std__ or false;
 }
