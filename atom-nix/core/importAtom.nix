@@ -94,7 +94,7 @@ let
     in
     inputsIndex.${fetcher} or throwNonExistingFetcher;
 
-  mkInput = name: inputs.${name} or abort "Missing Input for: `${name}`";
+  mkInput = name: inputs.${name};
 
   # TODO how to handle features?
   mkAtom =
