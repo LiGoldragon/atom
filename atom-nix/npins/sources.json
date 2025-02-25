@@ -1,5 +1,29 @@
 {
   "pins": {
+    "flake-compat": {
+      "type": "Git",
+      "repository": {
+        "type": "GitHub",
+        "owner": "ElvishJerricco",
+        "repo": "flake-compat"
+      },
+      "branch": "add-overrideInputs",
+      "revision": "ad8d6af6aa8a14851a60bd00927f42b9798544ea",
+      "url": "https://github.com/ElvishJerricco/flake-compat/archive/ad8d6af6aa8a14851a60bd00927f42b9798544ea.tar.gz",
+      "hash": "08nyw5g93qlw35nwnh19yynvbni2c3licf6xzhjiw0318dybbxs0"
+    },
+    "flake-inputs": {
+      "type": "Git",
+      "repository": {
+        "type": "GitHub",
+        "owner": "fricklerhandwerk",
+        "repo": "flake-inputs"
+      },
+      "branch": "main",
+      "revision": "559574c9cbb8af262f3944b67d60fbf0f6ad03c3",
+      "url": "https://github.com/fricklerhandwerk/flake-inputs/archive/559574c9cbb8af262f3944b67d60fbf0f6ad03c3.tar.gz",
+      "hash": "0gbhmp6x2vdzvfnsvqzal3g8f8hx2ia6r73aibc78kazf78m67x6"
+    },
     "nixpkgs": {
       "type": "Channel",
       "name": "nixpkgs-unstable",
