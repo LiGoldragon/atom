@@ -16,6 +16,7 @@
   valid input (and the CLI should type check on it's end)
 */
 {
+  system ? null,
   features ? null,
   __internal__test ? false,
 }:
@@ -101,6 +102,7 @@ mod.compose {
     config
     root
     src
+    system
     ;
   features = features';
   coreFeatures =

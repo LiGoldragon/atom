@@ -44,7 +44,7 @@ in
     modFromDir (stripParentDir par path);
   import = abort "Importing arbitrary Nix files is forbidden. Declare your dependencies via the module system instead.";
   fetch = abort "Ad hoc fetching is illegal. Declare dependencies statically in the manifest instead.";
-  system = abort "Accessing the current system is impure. Declare supported systems in the manifest.";
+  system = abort "System was requested but not enabled and defined";
   lib = abort "Lib feature was enabled and accessed, but wasn't included in dependencies";
   time = _: warn "currentTime: Ignoring request for current time, returning: 0";
   nixPath = _: warn "nixPath: ignoring impure NIX_PATH request, returning: []";
