@@ -15,104 +15,122 @@
   revalidating on the Nix side as an extra precaution, but initially, we just assume we have a
   valid input (and the CLI should type check on it's end)
 */
-{
+importAtomArgs@{
   features ? null,
   __internal__test ? false,
 }:
 path':
 let
-  mod = import ./mod.nix;
+  core = import ./mod.nix;
 
-  path = mod.prepDir path';
+  path = core.prepDir path';
 
   file = builtins.readFile path;
   config = builtins.fromTOML file;
   atom = config.atom or { };
-  id = builtins.seq version (atom.id or (mod.errors.missingAtom path' "id"));
-  version = atom.version or (mod.errors.missingAtom path' "version");
 
-  core = config.core or { };
+  # Here, `seq` ensures that `version` is set
+  id = builtins.seq version (atom.id or (core.errors.missingAtom path' "id"));
+  version = atom.version or (core.errors.missingAtom path' "version");
+
+  coreConfig = config.core or { };
   std = config.std or { };
 
-  features' =
+  features =
     let
+      atomFeatures = importAtomArgs.features or null;
       featSet = config.features or { };
-      featIn = if features == null then featSet.default or [ ] else features;
+      default = featSet.default or [ ];
+      argsHaveNoFeatures = atomFeatures == null;
+      featIn = if argsHaveNoFeatures then default else atomFeatures;
     in
-    mod.features.resolve featSet featIn;
+    core.features.resolve featSet featIn;
 
   backend = config.backend or { };
   nix = backend.nix or { };
 
-  root = mod.prepDir (dirOf path);
-  src = builtins.seq id (
+  root = core.prepDir (dirOf path);
+
+  src =
     let
-      file = mod.parse (baseNameOf path);
+      file = core.parse (baseNameOf path);
       len = builtins.stringLength file.name;
+      impliedSrc = builtins.substring 0 (len - 1) file.name;
     in
-    builtins.substring 0 (len - 1) file.name
-  );
+    # Here, `seq` ensures that `id` is set
+    builtins.seq id (atom.src or impliedSrc);
+
   extern =
     let
       fetcher = nix.fetcher or "native"; # native doesn't exist yet
-      conf = config.fetcher or { };
-      f = conf.${fetcher} or { };
-      root = f.root or "npins";
+      throwMissingNativeFetcher = abort "Native fetcher isn't implemented yet";
+
+      fetcherConfig = config.fetcher or { };
+      npinRoot = fetcherConfig.npin.root or "npins";
+      rawNpins = import (dirOf path + "/${npinRoot}");
+
+      fetchEnabledNpinsDep =
+        depName: depConfig:
+        let
+          depIsEnabled =
+            (depConfig.optional or false && builtins.elem depName features) || (!depConfig.optional or false);
+
+          npinSrc = "${rawNpins.${depConfig.name or depName}}/${depConfig.subdir or ""}";
+
+          applyArguments =
+            appliedFunction: nextArgument:
+            let
+              argsFromDeps = depConfig.argsFromDeps or true && builtins.isAttrs nextArgument;
+              argIntersectedwithDeps = nextArgument // (builtins.intersectAttrs nextArgument extern);
+            in
+            if argsFromDeps nextArgument then
+              appliedFunction argIntersectedwithDeps
+            else
+              appliedFunction nextArgument;
+
+          dependency =
+            if depConfig.import or false then
+              if depConfig.args or [ ] != [ ] then
+                builtins.foldl' applyArguments (import npinSrc) depConfig.args
+              else
+                import npinSrc
+            else
+              npinSrc;
+        in
+        if depIsEnabled then { "${depName}" = dependency; } else null;
+
+      npinsDeps = core.filterMap fetchEnabledNpinsDep config.fetch or { };
+
     in
     if fetcher == "npins" then
-      let
-        pins = import (dirOf path + "/${root}");
-      in
-      mod.filterMap (
-        k: v:
-        let
-          src = "${pins.${v.name or k}}/${v.subdir or ""}";
-          val =
-            if v.import or false then
-              if v.args or [ ] != [ ] then
-                builtins.foldl' (
-                  f: x:
-                  let
-                    intersect = x // (builtins.intersectAttrs x extern);
-                  in
-                  if builtins.isAttrs x then f intersect else f x
-                ) (import src) v.args
-              else
-                import src
-            else
-              src;
-        in
-        if (v.optional or false && builtins.elem k features') || (!v.optional or false) then
-          { "${k}" = val; }
-        else
-          null
-      ) config.fetch or { }
-    # else if fetcher = "native", etc
+      npinsDeps
+    else if fetcher == "native" then
+      throwMissingNativeFetcher
     else
       { };
 
   meta = atom.meta or { };
 
 in
-mod.compose {
+core.compose {
   inherit
     extern
     __internal__test
     config
     root
     src
+    features
     ;
-  features = features';
   coreFeatures =
     let
-      feat = core.features or mod.coreToml.features.default;
+      feat = coreConfig.features or core.coreToml.features.default;
     in
-    mod.features.resolve mod.coreToml.features feat;
+    core.features.resolve core.coreToml.features feat;
   stdFeatures =
     let
-      feat = std.features or mod.stdToml.features.default;
+      feat = std.features or core.stdToml.features.default;
     in
-    mod.features.resolve mod.stdToml.features feat;
+    core.features.resolve core.stdToml.features feat;
 
   __isStd__ = meta.__is_std__ or false;
 }
