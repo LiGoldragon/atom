@@ -16,6 +16,7 @@
   valid input (and the CLI should type check on it's end)
 */
 importAtomArgs@{
+  system ? null,
   features ? null,
   __internal__test ? false,
 }:
@@ -120,6 +121,7 @@ core.compose {
     root
     src
     features
+    system
     ;
   coreFeatures =
     let
