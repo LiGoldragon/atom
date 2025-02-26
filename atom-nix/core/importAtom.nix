@@ -15,104 +15,220 @@
   revalidating on the Nix side as an extra precaution, but initially, we just assume we have a
   valid input (and the CLI should type check on it's end)
 */
-{
+importAtomArgs@{
+  system ? null,
   features ? null,
+  inputs ? { },
+  propagate ? false,
+  _calledFromFlake ? false,
   __internal__test ? false,
+  # Passed to further `importAtom`s
+  importAtom ? (import ./importAtom.nix),
+  core ? (import ./mod.nix),
+  flakeCompatFn ? (import (import ../npins).flake-compat),
+  flakeInputsFn ? (import (import ../npins).flake-inputs),
 }:
 path':
 let
-  mod = import ./mod.nix;
-
-  path = mod.prepDir path';
+  path = core.prepDir path';
 
   file = builtins.readFile path;
   config = builtins.fromTOML file;
   atom = config.atom or { };
-  id = builtins.seq version (atom.id or (mod.errors.missingAtom path' "id"));
-  version = atom.version or (mod.errors.missingAtom path' "version");
 
-  core = config.core or { };
+  # Here, `seq` ensures that `version` is set
+  id = builtins.seq version (atom.id or (core.errors.missingAtom path' "id"));
+  version = atom.version or (core.errors.missingAtom path' "version");
+
+  coreConfig = config.core or { };
   std = config.std or { };
+  fetch = config.fetch or { };
 
-  features' =
+  propagate = importAtomArgs.propagate or false || atom.propagate or false;
+
+  features =
     let
+      atomFeatures = importAtomArgs.features or null;
       featSet = config.features or { };
-      featIn = if features == null then featSet.default or [ ] else features;
+      default = featSet.default or [ ];
+      argsHaveNoFeatures = atomFeatures == null;
+      featIn = if argsHaveNoFeatures then default else atomFeatures;
     in
-    mod.features.resolve featSet featIn;
+    core.features.resolve featSet featIn;
 
   backend = config.backend or { };
   nix = backend.nix or { };
 
-  root = mod.prepDir (dirOf path);
-  src = builtins.seq id (
+  root = core.prepDir (dirOf path);
+
+  src =
     let
-      file = mod.parse (baseNameOf path);
+      file = core.parse (baseNameOf path);
       len = builtins.stringLength file.name;
+      impliedSrc = builtins.substring 0 (len - 1) file.name;
     in
-    builtins.substring 0 (len - 1) file.name
-  );
-  extern =
+    # Here, `seq` ensures that `id` is set
+    builtins.seq id (atom.src or impliedSrc);
+
+  extern = core.filterMap mkExtern fetch;
+
+  mkExtern =
+    depName: depConfig:
     let
-      fetcher = nix.fetcher or "native"; # native doesn't exist yet
-      conf = config.fetcher or { };
-      f = conf.${fetcher} or { };
-      root = f.root or "npins";
+      type = depConfig.type or "atom";
+      depIsOptional = depConfig.optional or false;
+      featureIsEnabled = builtins.elem depName features;
+      depIsEnabled = !depIsOptional || (depIsOptional && featureIsEnabled);
+      typeError = abort "Dependency `${depName}` declares type `${type}` which does not exist";
+
+      makeIndex = {
+        atom = mkAtom;
+        flake = mkFlake;
+        import = mkImport;
+        lib = mkImport;
+        local = mkAtom;
+        src = mkSrc;
+      };
+
+      dependency = (makeIndex.${type} or typeError) depName depConfig;
+
     in
-    if fetcher == "npins" then
-      let
-        pins = import (dirOf path + "/${root}");
-      in
-      mod.filterMap (
-        k: v:
+    if depIsEnabled then { "${depName}" = dependency; } else null;
+
+  fetcher = nix.fetcher or "native";
+  fetcherConfig = config.fetcher or { };
+
+  # TODO native doesn't exist yet
+  throwMissingNativeFetcher = abort "Native fetcher isn't implemented yet";
+  throwNonExistingFetcher = abort "A `${backend}` fetcher does not exist";
+
+  npinRoot = fetcherConfig.npin.root or "npins";
+  rawNpins = import (root + "/${npinRoot}");
+  npinsInputs = rawNpins // (importAtomArgs.inputs or { });
+
+  flakeLock = flakeInputsFn { inherit root; };
+  flakeLockAndInputs = flakeLock // importAtomArgs.inputs;
+
+  # Nix flakes already have their inputs
+  flakeLockInputs = if _calledFromFlake then importAtomArgs.inputs else flakeLockAndInputs;
+
+  inputs =
+    let
+      inputsIndex = {
+        npins = npinsInputs;
+        flake-lock = flakeLockInputs;
+        native = throwMissingNativeFetcher;
+      };
+    in
+    inputsIndex.${fetcher} or throwNonExistingFetcher;
+
+  mkInput = name: inputs.${name};
+
+  # TODO how to handle features?
+  mkAtom =
+    depName: depConfig:
+    let
+      name = depConfig.name or depName;
+      type = depConfig.type or "atom";
+      srcRoot = if type == "local" then root else inputs.${name};
+      # TODO this will obviously evolve
+      manifestFileName = "${name}@.toml";
+      manifest = "${srcRoot}/${manifestFileName}";
+      overrides = depConfig.inputOverrides or [ ];
+      depHasInputOverrides = overrides != [ ];
+      overrideInputs = builtins.getAttrs overrides inputs;
+      optionalOverrides = if depHasInputOverrides then overrideInputs else { };
+      optionalInputs = if propagate then inputs else optionalOverrides;
+      args = {
+        inputs = optionalInputs;
+        inherit
+          system
+          importAtom
+          core
+          flakeCompatFn
+          flakeInputsFn
+          propagate
+          ;
+      };
+    in
+    importAtom args manifest;
+
+  mkFlake =
+    depName: depConfig:
+    let
+      name = depConfig.name or depName;
+      inputOverrides = depConfig.inputOverrides or [ ];
+      depHasInputOverrides = inputOverrides != [ ];
+      input = inputs.${name};
+
+      flakeCompatResult = flakeCompatFn {
+        src = input;
+        inherit system;
+      };
+
+      overrides = builtins.getAttrs inputOverrides inputs;
+      resultWithoutOverrides = flakeCompatResult.defaultNix;
+      resultWithInputOverrides = resultWithoutOverrides.overrideInputs overrides;
+
+      flakeCompatFlake =
+        if depHasInputOverrides then resultWithInputOverrides else resultWithoutOverrides;
+
+      inputIsFlake = input._type == "flake";
+      possiblyRawFlake = if inputIsFlake then input else flakeCompatFlake;
+
+    in
+    if _calledFromFlake then possiblyRawFlake else flakeCompatFlake;
+
+  mkImport =
+    depName: depConfig:
+    let
+      name = depConfig.name or depName;
+      input = inputs.${name};
+      inputIsFlake = input._type == "flake";
+      srcRootFromFlake = if inputIsFlake then input.outPath else input;
+      rawSrcRoot = if _calledFromFlake then srcRootFromFlake else input;
+      rawSrc = "${rawSrcRoot}/${depConfig.subdir or ""}";
+      depArgs = depConfig.args or [ ];
+      depHasArgs = depArgs != [ ];
+
+      applyNextArg =
+        appliedFunction: nextArgument:
         let
-          src = "${pins.${v.name or k}}/${v.subdir or ""}";
-          val =
-            if v.import or false then
-              if v.args or [ ] != [ ] then
-                builtins.foldl' (
-                  f: x:
-                  let
-                    intersect = x // (builtins.intersectAttrs x extern);
-                  in
-                  if builtins.isAttrs x then f intersect else f x
-                ) (import src) v.args
-              else
-                import src
-            else
-              src;
+          argsFromDeps = depConfig.argsFromDeps or true && builtins.isAttrs nextArgument;
+          intersectedArgument = nextArgument // (builtins.intersectAttrs nextArgument extern);
         in
-        if (v.optional or false && builtins.elem k features') || (!v.optional or false) then
-          { "${k}" = val; }
-        else
-          null
-      ) config.fetch or { }
-    # else if fetcher = "native", etc
-    else
-      { };
+        if argsFromDeps then appliedFunction intersectedArgument else appliedFunction nextArgument;
+
+      importedSrcWithArgs = builtins.foldl' applyNextArg (import rawSrc) depArgs;
+
+    in
+    if depHasArgs then importedSrcWithArgs else import rawSrc;
+
+  mkSrc = depName: depConfig: mkInput (depConfig.name or depName);
 
   meta = atom.meta or { };
 
 in
-mod.compose {
+core.compose {
   inherit
     extern
     __internal__test
     config
     root
     src
+    features
+    system
     ;
-  features = features';
   coreFeatures =
     let
-      feat = core.features or mod.coreToml.features.default;
+      feat = coreConfig.features or core.coreToml.features.default;
     in
-    mod.features.resolve mod.coreToml.features feat;
+    core.features.resolve core.coreToml.features feat;
   stdFeatures =
     let
-      feat = std.features or mod.stdToml.features.default;
+      feat = std.features or core.stdToml.features.default;
     in
-    mod.features.resolve mod.stdToml.features feat;
+    core.features.resolve core.stdToml.features feat;
 
   __isStd__ = meta.__is_std__ or false;
 }
