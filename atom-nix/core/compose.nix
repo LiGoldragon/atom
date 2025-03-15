@@ -133,6 +133,10 @@ let
               inherit std;
             }
             {
+              _if = l.elem "lib" cfg.features.resolved.atom;
+              lib = extern.lib or core.errors.lib;
+            }
+            {
               _if = __internal__test;
               # information about the internal module system itself
               # available to tests
