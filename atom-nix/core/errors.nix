@@ -46,6 +46,7 @@ in
   fetch = abort "Ad hoc fetching is illegal. Declare dependencies statically in the manifest instead.";
   system = abort "System was requested but not enabled and defined";
   lib = abort "Lib feature was enabled and accessed, but wasn't included in dependencies";
+  pkgs = abort "The `pkgs` feature was enabled and accessed, but `pkgs` is not in the dependencies";
   time = _: warn "currentTime: Ignoring request for current time, returning: 0";
   nixPath = _: warn "nixPath: ignoring impure NIX_PATH request, returning: []";
   storePath = abort "Making explicit dependencies on store paths is illegal.";

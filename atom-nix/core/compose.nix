@@ -141,6 +141,10 @@ let
               lib = extern.lib or core.errors.lib;
             }
             {
+              _if = l.elem "pkgs" cfg.features.resolved.atom;
+              pkgs = extern.pkgs or core.errors.pkgs;
+            }
+            {
               _if = !__isStd__;
               system = if systemIsDefinedAndEnabled then input.system else core.errors.system;
             }
