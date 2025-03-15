@@ -44,6 +44,8 @@ let
   std = config.std or { };
   fetch = config.fetch or { };
 
+  systemIsDefinedAndEnabled = system != null && config.atom.system or false;
+
   propagate = importAtomArgs.propagate or false || atom.propagate or false;
 
   features =
@@ -87,6 +89,7 @@ let
         import = mkImport;
         lib = mkImport;
         local = mkAtom;
+        pkgs = mkPkgs;
         src = mkSrc;
       };
 
@@ -203,6 +206,22 @@ let
 
     in
     if depHasArgs then importedSrcWithArgs else import rawSrc;
+
+  mkPkgs =
+    depName: depConfig:
+    let
+      name = depConfig.name or depName;
+      input = inputs.${name};
+      inputIsFlake = (input._type or false) == "flake";
+      pkgsFromFlake = input.legacyPackages.${system};
+      entryPath = input + "/pkgs/top-level";
+      importedPkgs = import entryPath {
+        localSystem = { inherit system; };
+      };
+
+    in
+    assert systemIsDefinedAndEnabled;
+    if inputIsFlake then pkgsFromFlake else importedPkgs;
 
   mkSrc = depName: depConfig: mkInput (depConfig.name or depName);
 
