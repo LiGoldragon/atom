@@ -63,6 +63,7 @@ input@{
   root,
   config,
   system ? null,
+  registry ? { },
   extern ? { },
   features ? [ ],
   # internal features of the composer function
@@ -81,6 +82,7 @@ let
   } (../. + "/std@.toml");
 
   systemIsDefinedAndEnabled = system != null && config.atom.system or false;
+  registryIsDefinedAndEnabled = registry != null && config.atom.registry or false;
 
   coreFeatures' = core.features.resolve core.coreToml.features coreFeatures;
   stdFeatures' = core.features.resolve core.stdToml.features stdFeatures;
@@ -147,6 +149,10 @@ let
             {
               _if = !__isStd__;
               system = if systemIsDefinedAndEnabled then input.system else core.errors.system;
+            }
+            {
+              _if = !__isStd__;
+              registry = if registryIsDefinedAndEnabled then input.registry else core.errors.registry;
             }
             {
               _if = __internal__test;
