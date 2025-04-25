@@ -64,6 +64,8 @@ input@{
   config,
   system ? null,
   registry ? { },
+  pkgs ? null,
+  lib ? null,
   extern ? { },
   features ? [ ],
   # internal features of the composer function
@@ -81,8 +83,10 @@ let
     inherit __internal__test;
   } (../. + "/std@.toml");
 
-  systemIsDefinedAndEnabled = system != null && config.atom.system or false;
-  registryIsDefinedAndEnabled = registry != null && config.atom.registry or false;
+  systemIsEnabled = system != null && config.atom.system or false;
+  registryIsEnabled = registry != null && config.atom.registry or false;
+  pkgsIsEnabled = pkgs != null && config.atom.pkgs or false;
+  libIsEnabled = lib != null && config.atom.lib or false;
 
   coreFeatures' = core.features.resolve core.coreToml.features coreFeatures;
   stdFeatures' = core.features.resolve core.stdToml.features stdFeatures;
@@ -139,20 +143,20 @@ let
               inherit std;
             }
             {
-              _if = l.elem "lib" cfg.features.resolved.atom;
-              lib = extern.lib or core.errors.lib;
+              _if = libIsEnabled;
+              lib = input.lib or core.errors.lib;
             }
             {
-              _if = l.elem "pkgs" cfg.features.resolved.atom;
-              pkgs = extern.pkgs or core.errors.pkgs;
-            }
-            {
-              _if = !__isStd__;
-              system = if systemIsDefinedAndEnabled then input.system else core.errors.system;
+              _if = pkgsIsEnabled;
+              pkgs = input.pkgs or core.errors.pkgs;
             }
             {
               _if = !__isStd__;
-              registry = if registryIsDefinedAndEnabled then input.registry else core.errors.registry;
+              system = if systemIsEnabled then input.system else core.errors.system;
+            }
+            {
+              _if = !__isStd__;
+              registry = if registryIsEnabled then input.registry else core.errors.registry;
             }
             {
               _if = __internal__test;
