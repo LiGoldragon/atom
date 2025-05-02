@@ -83,10 +83,18 @@ let
     inherit __internal__test;
   } (../. + "/std@.toml");
 
-  systemIsEnabled = system != null && config.atom.system or false;
-  registryIsEnabled = registry != null && config.atom.registry or false;
-  pkgsIsEnabled = pkgs != null && config.atom.pkgs or false;
   libIsEnabled = lib != null && config.atom.lib or false;
+
+  systemIsDefined = system != null;
+  systemIsEnabled =
+    assert systemIsDefined;
+    pkgsIsEnabled || (config.atom.system or false);
+
+  pkgsIsEnabled =
+    assert systemIsDefined;
+    pkgs != null && config.atom.pkgs or false;
+
+  registryIsEnabled = registry != null && config.atom.registry or false;
 
   coreFeatures' = core.features.resolve core.coreToml.features coreFeatures;
   stdFeatures' = core.features.resolve core.stdToml.features stdFeatures;
@@ -143,16 +151,16 @@ let
               inherit std;
             }
             {
-              _if = libIsEnabled;
-              lib = input.lib or core.errors.lib;
+              _if = !__isStd__ && libIsEnabled;
+              inherit lib;
             }
             {
-              _if = pkgsIsEnabled;
-              pkgs = input.pkgs or core.errors.pkgs;
+              _if = !__isStd__ && pkgsIsEnabled;
+              inherit pkgs;
             }
             {
-              _if = !__isStd__;
-              system = if systemIsEnabled then input.system else core.errors.system;
+              _if = !__isStd__ && systemIsEnabled;
+              inherit system;
             }
             {
               _if = !__isStd__;
